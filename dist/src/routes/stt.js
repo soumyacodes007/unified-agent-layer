@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { createClient } from '@deepgram/sdk';
 import multer from 'multer';
+import { config } from '../config.js';
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } }); // 25MB limit
 // ─── POST /v1/stt ─────────────────────────────────────────────────────────────
@@ -11,7 +12,7 @@ router.post('/v1/stt', upload.single('audio'), async (req, res) => {
         res.status(400).json({ error: 'Audio file is required. Send as multipart/form-data field: audio' });
         return;
     }
-    const deepgram = createClient(process.env.DEEPGRAM_API_KEY);
+    const deepgram = createClient(config.providers.deepgram.apiKey);
     try {
         const { result, error } = await deepgram.listen.prerecorded.transcribeFile(req.file.buffer, {
             model: 'nova-3',

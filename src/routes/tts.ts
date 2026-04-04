@@ -1,5 +1,6 @@
 import { Router, type Request, type Response } from 'express';
 import { createClient } from '@deepgram/sdk';
+import { config } from '../config.js';
 
 const router = Router();
 
@@ -19,7 +20,7 @@ router.post('/v1/tts', async (req: Request, res: Response) => {
     return;
   }
 
-  const deepgram = createClient(process.env.DEEPGRAM_API_KEY!);
+  const deepgram = createClient(config.providers.deepgram.apiKey);
 
   try {
     const response = await deepgram.speak.request(

@@ -1,6 +1,7 @@
 import { Router, type Request, type Response } from 'express';
 import { PinataSDK } from 'pinata';
 import multer from 'multer';
+import { config } from '../config.js';
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 100 * 1024 * 1024 } }); // 100MB limit
@@ -15,8 +16,8 @@ router.post('/v1/storage', upload.single('file'), async (req: Request, res: Resp
   }
 
   const pinata = new PinataSDK({
-    pinataJwt: process.env.PINATA_JWT!,
-    pinataGateway: process.env.PINATA_GATEWAY ?? 'gateway.pinata.cloud',
+    pinataJwt: config.providers.pinata.jwt,
+    pinataGateway: config.providers.pinata.gateway,
   });
 
   try {
@@ -25,7 +26,7 @@ router.post('/v1/storage', upload.single('file'), async (req: Request, res: Resp
 
     const upload = await pinata.upload.file(file);
 
-    const gatewayUrl = `https://${process.env.PINATA_GATEWAY ?? 'gateway.pinata.cloud'}/ipfs/${upload.cid}`;
+    const gatewayUrl = `https://${config.providers.pinata.gateway}/ipfs/${upload.cid}`;
 
     res.json({
       ipfs_hash: upload.cid,

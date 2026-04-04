@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { InferenceClient } from '@huggingface/inference';
+import { config } from '../config.js';
 const router = Router();
 // ─── POST /v1/hf ─────────────────────────────────────────────────────────────
 // Runs inference on any HuggingFace model via the Serverless Inference API.
@@ -15,7 +16,7 @@ router.post('/v1/hf', async (req, res) => {
         res.status(400).json({ error: 'inputs field is required in the request body.' });
         return;
     }
-    const hf = new InferenceClient(process.env.HF_ACCESS_TOKEN);
+    const hf = new InferenceClient(config.providers.hf.accessToken);
     try {
         const result = await hf.request({
             model: modelId,

@@ -1,5 +1,6 @@
 import { Router, type Request, type Response } from 'express';
 import { InferenceClient } from '@huggingface/inference';
+import { config } from '../config.js';
 
 const router = Router();
 
@@ -19,7 +20,7 @@ router.post('/v1/hf', async (req: Request, res: Response) => {
     return;
   }
 
-  const hf = new InferenceClient(process.env.HF_ACCESS_TOKEN);
+  const hf = new InferenceClient(config.providers.hf.accessToken);
 
   try {
     const result = await hf.request({

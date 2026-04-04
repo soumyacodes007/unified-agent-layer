@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { createClient } from '@deepgram/sdk';
+import { config } from '../config.js';
 const router = Router();
 // ─── POST /v1/tts ─────────────────────────────────────────────────────────────
 // Converts text to speech using Deepgram Aura-2.
@@ -14,7 +15,7 @@ router.post('/v1/tts', async (req, res) => {
         res.status(400).json({ error: 'text must be 5000 characters or fewer' });
         return;
     }
-    const deepgram = createClient(process.env.DEEPGRAM_API_KEY);
+    const deepgram = createClient(config.providers.deepgram.apiKey);
     try {
         const response = await deepgram.speak.request({ text }, {
             model: voice,

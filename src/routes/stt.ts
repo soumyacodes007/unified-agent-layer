@@ -1,6 +1,7 @@
 import { Router, type Request, type Response } from 'express';
 import { createClient } from '@deepgram/sdk';
 import multer from 'multer';
+import { config } from '../config.js';
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } }); // 25MB limit
@@ -14,7 +15,7 @@ router.post('/v1/stt', upload.single('audio'), async (req: Request, res: Respons
     return;
   }
 
-  const deepgram = createClient(process.env.DEEPGRAM_API_KEY!);
+  const deepgram = createClient(config.providers.deepgram.apiKey);
 
   try {
     const { result, error } = await deepgram.listen.prerecorded.transcribeFile(

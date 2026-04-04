@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { fal } from '@fal-ai/client';
+import { config } from '../config.js';
 const router = Router();
 // Fal model IDs map
 const FAL_MODELS = {
@@ -24,7 +25,7 @@ router.post('/v1/image', async (req, res) => {
         return;
     }
     // Configure fal.ai with API key
-    fal.config({ credentials: process.env.FAL_KEY });
+    fal.config({ credentials: config.providers.fal.key });
     try {
         const input = { prompt, image_size: { width, height } };
         if (num_inference_steps)

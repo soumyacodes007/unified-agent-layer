@@ -15,10 +15,10 @@ import computeRouter from './routes/compute.js';
 import hfRouter from './routes/hf.js';
 import searchRouter from './routes/search.js';
 import weatherRouter from './routes/weather.js';
-// ─── Config ───────────────────────────────────────────────────────────────────
-const PORT = parseInt(process.env.PORT ?? '4030', 10);
-const AVM_ADDRESS = process.env.AVM_ADDRESS ?? '';
-const FACILITATOR_URL = process.env.FACILITATOR_URL ?? 'https://facilitator.goplausible.xyz';
+import { config } from './config.js';
+const { port, host } = config.server;
+const AVM_ADDRESS = config.x402.avmAddress;
+const FACILITATOR_URL = config.x402.facilitatorUrl;
 if (!AVM_ADDRESS) {
     console.error('❌ AVM_ADDRESS is required in .env');
     process.exit(1);
@@ -78,7 +78,7 @@ app.use(paymentMiddleware({
         description: 'AI image generation via Flux.1 [schnell] on fal.ai',
     },
     // ── IPFS Storage ─────────────────────────────────────────────────────
-    'POST /v1/storage/upload': {
+    'POST /v1/storage': {
         accepts: {
             scheme: 'exact',
             network: ALGORAND_TESTNET_CAIP2,
@@ -88,7 +88,7 @@ app.use(paymentMiddleware({
         description: 'Permanent decentralized IPFS storage via Pinata',
     },
     // ── Code Execution ───────────────────────────────────────────────────
-    'POST /v1/compute/run': {
+    'POST /v1/compute': {
         accepts: {
             scheme: 'exact',
             network: ALGORAND_TESTNET_CAIP2,
@@ -170,8 +170,8 @@ app.get('/', (_req, res) => {
             'POST /v1/stt': '$0.010 — Speech-to-text',
             'POST /v1/tts': '$0.010 — Text-to-speech',
             'POST /v1/image': '$0.050 — Image generation',
-            'POST /v1/storage/upload': '$0.020 — IPFS storage',
-            'POST /v1/compute/run': '$0.010 — Code execution',
+            'POST /v1/storage': '$0.020 — IPFS storage',
+            'POST /v1/compute': '$0.010 — Code execution',
             'POST /v1/hf': '$0.030 — HuggingFace inference',
             'POST /v1/search': '$0.030 — Web search',
             'GET  /v1/weather': '$0.010 — Weather data + forecast',
@@ -186,8 +186,8 @@ app.use((_req, res) => {
     res.status(404).json({ error: 'Not found' });
 });
 // ─── Start ────────────────────────────────────────────────────────────────────
-const baseUrl = process.env.SERVICE_URL ?? `http://localhost:${PORT}`;
-app.listen(PORT, () => {
+const baseUrl = config.server.serviceUrl ?? `http://localhost:${port}`;
+app.listen(port, host, () => {
     console.log('\n🚀 Agent API — Unified AI Layer');
     console.log(`   URL:         ${baseUrl}`);
     console.log(`   Facilitator: ${FACILITATOR_URL}`);

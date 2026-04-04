@@ -1,11 +1,12 @@
 import { Router, type Request, type Response } from 'express';
 import { tavily } from '@tavily/core';
+import { config } from '../config.js';
 
 const router = Router();
 // Lazy init — prevents crash at startup when TAVILY_API_KEY is missing
 let _tv: ReturnType<typeof tavily> | null = null;
 function getTavily() {
-  if (!_tv) _tv = tavily({ apiKey: process.env.TAVILY_API_KEY ?? '' });
+  if (!_tv) _tv = tavily({ apiKey: config.providers.tavily.apiKey });
   return _tv;
 }
 
@@ -26,7 +27,7 @@ router.post('/v1/search', async (req: Request, res: Response) => {
     return;
   }
 
-  if (!process.env.TAVILY_API_KEY) {
+  if (!config.providers.tavily.apiKey) {
     res.status(503).json({ error: 'Search service unavailable: TAVILY_API_KEY not configured' });
     return;
   }

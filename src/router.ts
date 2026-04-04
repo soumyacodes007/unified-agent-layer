@@ -1,12 +1,14 @@
+import { config } from './config.js';
 import Groq from 'groq-sdk';
 
 let _groq: Groq | null = null;
 function getGroq(): Groq {
   if (!_groq) {
-    if (!process.env.GROQ_API_KEY) {
+    const apiKey = config.providers.groq.apiKey;
+    if (!apiKey) {
       throw new Error('GROQ_API_KEY is missing in environment variables');
     }
-    _groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+    _groq = new Groq({ apiKey });
   }
   return _groq;
 }

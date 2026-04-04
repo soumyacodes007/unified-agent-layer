@@ -1,4 +1,5 @@
 import { Router, type Request, type Response } from 'express';
+import { config } from '../config.js';
 
 const router = Router();
 
@@ -17,71 +18,78 @@ router.post('/v1/compute', async (req: Request, res: Response) => {
     return;
   }
 
-  const pistonUrl = process.env.PISTON_URL;
-  if (!pistonUrl) {
-    res.status(503).json({
-      error: 'Compute service is not configured.',
-      setup: 'Run: docker run -d -p 2000:2000 ghcr.io/engineer-man/piston and set PISTON_URL=http://localhost:2000',
-    });
-    return;
-  }
+  const primaryUrl = config.compute.pistonUrl;
+  const fallbackUrl = config.compute.pistonFallbackUrl;
 
-  try {
-    // First fetch available runtimes to validate language + get version
-    const runtimesRes = await fetch(`${pistonUrl}/api/v2/runtimes`);
-    if (!runtimesRes.ok) throw new Error('Piston runtimes endpoint unavailable');
-    const runtimes = await runtimesRes.json() as { language: string; version: string; aliases: string[] }[];
+  async function tryExecute(url: string, isFallback: boolean): Promise<boolean> {
+    try {
+      // First fetch available runtimes to validate language + get version
+      const runtimesRes = await fetch(`${url}/api/v2/runtimes`);
+      if (!runtimesRes.ok) throw new Error('Piston runtimes endpoint unavailable');
+      const runtimes = await runtimesRes.json() as { language: string; version: string; aliases: string[] }[];
 
-    const runtime = runtimes.find(
-      r => r.language === language.toLowerCase() || r.aliases.includes(language.toLowerCase())
-    );
+      const runtime = runtimes.find(
+        r => r.language === language.toLowerCase() || r.aliases.includes(language.toLowerCase())
+      );
 
-    if (!runtime) {
-      res.status(400).json({
-        error: `Language '${language}' not supported.`,
-        supported: runtimes.map(r => r.language),
+      if (!runtime) {
+        res.status(400).json({
+          error: `Language '${language}' not supported.`,
+          supported: runtimes.map(r => r.language),
+        });
+        return true; // Sent 400, stop
+      }
+
+      // Execute the code
+      const execRes = await fetch(`${url}/api/v2/execute`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          language: runtime.language,
+          version: runtime.version,
+          files: [{ name: `main.${getExtension(runtime.language)}`, content: code }],
+          stdin,
+          args,
+          run_timeout: 10000,
+          compile_timeout: 15000,
+        }),
       });
-      return;
-    }
 
-    // Execute the code
-    const execRes = await fetch(`${pistonUrl}/api/v2/execute`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+      if (!execRes.ok) {
+        throw new Error(`Piston returned ${execRes.status}: ${await execRes.text()}`);
+      }
+
+      const result = await execRes.json() as {
+        run: { stdout: string; stderr: string; code: number; signal: string | null };
+        compile?: { stdout: string; stderr: string; code: number };
+      };
+
+      res.json({
+        stdout: result.run.stdout,
+        stderr: result.run.stderr,
+        exit_code: result.run.code,
+        signal: result.run.signal,
+        compile: result.compile ?? null,
         language: runtime.language,
         version: runtime.version,
-        files: [{ name: `main.${getExtension(runtime.language)}`, content: code }],
-        stdin,
-        args,
-        run_timeout: 10000,  // 10 second timeout
-        compile_timeout: 15000,
-      }),
-    });
-
-    if (!execRes.ok) {
-      throw new Error(`Piston returned ${execRes.status}: ${await execRes.text()}`);
+        provider: isFallback ? 'piston-public' : 'piston-local',
+      });
+      return true;
+    } catch (err: any) {
+      if (!isFallback && (err.code === 'ECONNREFUSED' || err.message.includes('fetch failed'))) {
+        console.warn(`[compute] Local Piston unreachable at ${url}, falling back to public API...`);
+        return false; // Try fallback
+      }
+      console.error(`[compute] Piston error (${isFallback ? 'public' : 'local'}):`, err);
+      const msg = err instanceof Error ? err.message : String(err);
+      res.status(502).json({ error: 'Code execution failed', details: msg, provider: isFallback ? 'public' : 'local' });
+      return true;
     }
+  }
 
-    const result = await execRes.json() as {
-      run: { stdout: string; stderr: string; code: number; signal: string | null };
-      compile?: { stdout: string; stderr: string; code: number };
-    };
-
-    res.json({
-      stdout: result.run.stdout,
-      stderr: result.run.stderr,
-      exit_code: result.run.code,
-      signal: result.run.signal,
-      compile: result.compile ?? null,
-      language: runtime.language,
-      version: runtime.version,
-      provider: 'piston',
-    });
-  } catch (err: unknown) {
-    console.error('[compute] Piston error:', err);
-    const msg = err instanceof Error ? err.message : String(err);
-    res.status(502).json({ error: 'Code execution failed', details: msg });
+  const handled = await tryExecute(primaryUrl, false);
+  if (!handled) {
+    await tryExecute(fallbackUrl, true);
   }
 });
 
