@@ -30,6 +30,13 @@ registerExactAvmScheme(server);
 server.registerExtension(bazaarResourceServerExtension);
 // ─── Express App ──────────────────────────────────────────────────────────────
 const app = express();
+// Global handles for diagnostics
+process.on('uncaughtException', (err) => {
+    console.error('❌ UNCAUGHT EXCEPTION:', err);
+});
+process.on('unhandledRejection', (reason) => {
+    console.error('❌ UNHANDLED REJECTION:', reason);
+});
 // Diagnostic Logger (Crucial for Railway testing)
 app.use((req, _res, next) => {
     console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
@@ -38,18 +45,28 @@ app.use((req, _res, next) => {
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.set('json spaces', 2);
+// ─── Payment Protection (Root Level) ──────────────────────────────────────────
+// We mount protection at the root to ensure it sees the full "/v1/..." paths.
+// This prevents the "Free Access" bypass when mounted at sub-paths.
+app.use(protectChat(server));
+app.use(protectStt(server));
+app.use(protectTts(server));
+app.use(protectImage(server));
+app.use(protectStorage(server));
+app.use(protectCompute(server));
+app.use(protectHf(server));
+app.use(protectSearch(server));
+app.use(protectWeather(server));
 // ─── Atomic Route Mounting ────────────────────────────────────────────────────
-// We mount each router under /v1 and apply the specific protection for that route.
-// This is much more robust for Express 5 and Railway routing than global matching.
-app.use('/v1', protectChat(server), llmRouter);
-app.use('/v1', protectStt(server), sttRouter);
-app.use('/v1', protectTts(server), ttsRouter);
-app.use('/v1', protectImage(server), imageRouter);
-app.use('/v1', protectStorage(server), storageRouter);
-app.use('/v1', protectCompute(server), computeRouter);
-app.use('/v1', protectHf(server), hfRouter);
-app.use('/v1', protectSearch(server), searchRouter);
-app.use('/v1', protectWeather(server), weatherRouter);
+app.use('/v1', llmRouter);
+app.use('/v1', sttRouter);
+app.use('/v1', ttsRouter);
+app.use('/v1', imageRouter);
+app.use('/v1', storageRouter);
+app.use('/v1', computeRouter);
+app.use('/v1', hfRouter);
+app.use('/v1', searchRouter);
+app.use('/v1', weatherRouter);
 // ─── Public Endpoints ─────────────────────────────────────────────────────────
 app.get('/', (_req, res) => {
     res.json({
@@ -81,12 +98,20 @@ app.use((_req, res) => {
 });
 // ─── Start ────────────────────────────────────────────────────────────────────
 const baseUrl = config.server.serviceUrl ?? `http://localhost:${port}`;
-app.listen(port, host, () => {
-    console.log('\n🚀 Agent API — Unified AI Layer');
-    console.log(`   URL:         ${baseUrl}`);
-    console.log(`   Facilitator: ${FACILITATOR_URL}`);
-    console.log(`   Pay To:      ${AVM_ADDRESS}`);
-    console.log(`   Network:     algorand:testnet (CAIP-2)`);
-    console.log(`\n   Routes: /v1/chat | /v1/stt | /v1/tts | /v1/image | /v1/storage | /v1/compute | /v1/hf | /v1/search | /v1/weather\n`);
-});
+try {
+    app.listen(port, host, () => {
+        console.log('\n🚀 Agent API — Unified AI Layer');
+        console.log(`   URL:         ${baseUrl}`);
+        console.log(`   Host/Port:   ${host}:${port}`);
+        console.log(`   Facilitator: ${FACILITATOR_URL}`);
+        console.log(`   Pay To:      ${AVM_ADDRESS}`);
+        console.log(`   Network:     algorand:testnet (CAIP-2)`);
+        console.log(`\n   Routes: /v1/chat | /v1/stt | /v1/tts | /v1/image | /v1/storage | /v1/compute | /v1/hf | /v1/search | /v1/weather\n`);
+    });
+    // Keep-alive mechanism to ensure event loop doesn't empty out
+    setInterval(() => { }, 60000);
+}
+catch (err) {
+    console.error('❌ CRITICAL STARTUP ERROR:', err);
+}
 export default app;

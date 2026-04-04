@@ -42,7 +42,7 @@ const app = express();
 process.on('uncaughtException', (err) => {
   console.error('❌ UNCAUGHT EXCEPTION:', err);
 });
-process.on('unhandledRejection', (reason, promise) => {
+process.on('unhandledRejection', (reason) => {
   console.error('❌ UNHANDLED REJECTION:', reason);
 });
 
@@ -56,19 +56,29 @@ app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.set('json spaces', 2);
 
-// ─── Atomic Route Mounting ────────────────────────────────────────────────────
-// We mount each router under /v1 and apply the specific protection for that route.
-// This is much more robust for Express 5 and Railway routing than global matching.
+// ─── Payment Protection (Root Level) ──────────────────────────────────────────
+// We mount protection at the root to ensure it sees the full "/v1/..." paths.
+// This prevents the "Free Access" bypass when mounted at sub-paths.
+app.use(protectChat(server));
+app.use(protectStt(server));
+app.use(protectTts(server));
+app.use(protectImage(server));
+app.use(protectStorage(server));
+app.use(protectCompute(server));
+app.use(protectHf(server));
+app.use(protectSearch(server));
+app.use(protectWeather(server));
 
-app.use('/v1', protectChat(server), llmRouter);
-app.use('/v1', protectStt(server), sttRouter);
-app.use('/v1', protectTts(server), ttsRouter);
-app.use('/v1', protectImage(server), imageRouter);
-app.use('/v1', protectStorage(server), storageRouter);
-app.use('/v1', protectCompute(server), computeRouter);
-app.use('/v1', protectHf(server), hfRouter);
-app.use('/v1', protectSearch(server), searchRouter);
-app.use('/v1', protectWeather(server), weatherRouter);
+// ─── Atomic Route Mounting ────────────────────────────────────────────────────
+app.use('/v1', llmRouter);
+app.use('/v1', sttRouter);
+app.use('/v1', ttsRouter);
+app.use('/v1', imageRouter);
+app.use('/v1', storageRouter);
+app.use('/v1', computeRouter);
+app.use('/v1', hfRouter);
+app.use('/v1', searchRouter);
+app.use('/v1', weatherRouter);
 
 // ─── Public Endpoints ─────────────────────────────────────────────────────────
 app.get('/', (_req, res) => {
@@ -106,7 +116,7 @@ app.use((_req, res) => {
 const baseUrl = config.server.serviceUrl ?? `http://localhost:${port}`;
 
 try {
-  const serverInstance = app.listen(port, host, () => {
+  app.listen(port, host, () => {
     console.log('\n🚀 Agent API — Unified AI Layer');
     console.log(`   URL:         ${baseUrl}`);
     console.log(`   Host/Port:   ${host}:${port}`);
@@ -116,17 +126,8 @@ try {
     console.log(`\n   Routes: /v1/chat | /v1/stt | /v1/tts | /v1/image | /v1/storage | /v1/compute | /v1/hf | /v1/search | /v1/weather\n`);
   });
 
-  serverInstance.on('error', (err: any) => {
-    console.error('❌ SERVER ERROR:', err);
-    if (err.code === 'EADDRINUSE') {
-      console.error(`Port ${port} is already in use.`);
-    }
-  });
-
   // Keep-alive mechanism to ensure event loop doesn't empty out
-  setInterval(() => {
-    // Just a heartbeat to keep process alive in environments with empty event loops
-  }, 60000);
+  setInterval(() => {}, 60000);
 
 } catch (err) {
   console.error('❌ CRITICAL STARTUP ERROR:', err);

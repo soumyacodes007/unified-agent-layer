@@ -17,7 +17,7 @@ export function protectTts(server: any) {
           payTo: config.x402.avmAddress,
           price: '$0.01',
         },
-        description: 'Ultra-low latency TTS via Deepgram Aura-2',
+        description: 'Ultra-low latency TTS via Deepgram Aura',
       },
     },
     server
@@ -33,13 +33,17 @@ router.post('/tts', async (req: Request, res: Response) => {
     return;
   }
 
+  // Deepgram Aura models: aura-asteria-en, aura-luna-en, aura-stella-en, etc.
+  // "aura-2-en-us" might not be available on all projects.
+  const modelId = voice.includes('aura') ? voice : 'aura-asteria-en';
+
   const deepgram = createClient(config.providers.deepgram.apiKey);
 
   try {
     const response = await deepgram.speak.request(
       { text },
       {
-        model: voice,
+        model: modelId,
         encoding: 'linear16',
         container: 'wav',
       }
@@ -48,7 +52,7 @@ router.post('/tts', async (req: Request, res: Response) => {
     const stream = await response.getStream();
     if (!stream) throw new Error('Could not get audio stream from Deepgram');
 
-    // Convert stream to Buffer (robust way if getBuffer is missing in TS types)
+    // Convert stream to Buffer (robust way for Node.js)
     const reader = stream.getReader();
     const chunks: Uint8Array[] = [];
     while (true) {
@@ -57,6 +61,21 @@ router.post('/tts', async (req: Request, res: Response) => {
       if (value) chunks.push(value);
     }
     const buffer = Buffer.concat(chunks);
+
+    // If the buffer is extremely small, it might be a JSON error from the provider
+    if (buffer.length < 500) {
+      const textResponse = buffer.toString();
+      if (textResponse.includes('err_code')) {
+        const err = JSON.parse(textResponse);
+        res.status(403).json({
+          error: 'Upstream Provider Error',
+          message: err.err_msg || 'Deepgram permsission error',
+          code: err.err_code,
+          hint: 'The requested voice model may not be accessible with your API key.'
+        });
+        return;
+      }
+    }
 
     res.set({
       'Content-Type': 'audio/wav',
