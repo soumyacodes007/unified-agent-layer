@@ -1,5 +1,40 @@
 import { Router } from 'express';
+import { paymentMiddleware } from '@x402-avm/express';
+import { ALGORAND_TESTNET_CAIP2 } from '@x402-avm/avm';
+import { declareDiscoveryExtension } from '@x402-avm/extensions';
+import { config } from '../config.js';
 const router = Router();
+// ─── Payment Protection ───────────────────────────────────────────────────────
+export function protectWeather(server) {
+    return paymentMiddleware({
+        'GET /v1/weather': {
+            accepts: {
+                scheme: 'exact',
+                network: ALGORAND_TESTNET_CAIP2,
+                payTo: config.x402.avmAddress,
+                price: '$0.01',
+            },
+            description: 'HyperLocal Weather Agent — real-time weather + 5-day forecast',
+            extensions: declareDiscoveryExtension({
+                input: { city: 'Mumbai', units: 'metric' },
+                inputSchema: {
+                    properties: {
+                        city: { type: 'string', description: 'City name (e.g. Mumbai, London, New York)' },
+                        units: { type: 'string', enum: ['metric', 'imperial'] },
+                    },
+                    required: ['city'],
+                },
+                output: {
+                    example: {
+                        city: 'Mumbai',
+                        current: { temperature: 32.4, humidity: 78, condition: 'Partly Cloudy', windSpeed: 18.2 },
+                        forecast: [{ day: 'Mon', high: 35, low: 27, condition: 'Sunny', precipChance: 10 }],
+                    },
+                },
+            }),
+        },
+    }, server);
+}
 const CONDITIONS = ['Sunny', 'Cloudy', 'Partly Cloudy', 'Rainy', 'Thunderstorm', 'Windy', 'Foggy', 'Snowy'];
 const CITIES = {
     'Mumbai': { lat: 19.076, lon: 72.877, timezone: 'Asia/Kolkata' },
@@ -12,8 +47,8 @@ const CITIES = {
 function randomBetween(min, max, decimals = 1) {
     return parseFloat((Math.random() * (max - min) + min).toFixed(decimals));
 }
-// GET /v1/weather?city=Mumbai&units=metric
-router.get('/v1/weather', (req, res) => {
+// GET /weather?city=Mumbai&units=metric (Mounted at /v1/weather)
+router.get('/weather', (req, res) => {
     const city = req.query.city || 'Mumbai';
     const units = req.query.units === 'imperial' ? 'imperial' : 'metric';
     const cityInfo = CITIES[city] ?? { lat: randomBetween(-90, 90), lon: randomBetween(-180, 180), timezone: 'UTC' };

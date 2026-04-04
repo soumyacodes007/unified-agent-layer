@@ -1,8 +1,29 @@
 import { Router, type Request, type Response } from 'express';
 import { tavily } from '@tavily/core';
+import { paymentMiddleware } from '@x402-avm/express';
+import { ALGORAND_TESTNET_CAIP2 } from '@x402-avm/avm';
 import { config } from '../config.js';
 
 const router = Router();
+
+// ─── Payment Protection ───────────────────────────────────────────────────────
+export function protectSearch(server: any) {
+  return paymentMiddleware(
+    {
+      'POST /v1/search': {
+        accepts: {
+          scheme: 'exact',
+          network: ALGORAND_TESTNET_CAIP2,
+          payTo: config.x402.avmAddress,
+          price: '$0.03',
+        },
+        description: 'Real-time web search via Tavily (LLM-ready output)',
+      },
+    },
+    server
+  );
+}
+
 // Lazy init — prevents crash at startup when TAVILY_API_KEY is missing
 let _tv: ReturnType<typeof tavily> | null = null;
 function getTavily() {
@@ -10,17 +31,9 @@ function getTavily() {
   return _tv;
 }
 
-// ─── POST /v1/search ───────────────────────────────────────────────────────────
-// Real-time web search powered by Tavily. Returns LLM-ready structured results.
-// search_depth: 'basic' (fast) | 'advanced' (deeper, more accurate)
-// max_results:  number of results to return (1–10, default 5)
-router.post('/v1/search', async (req: Request, res: Response) => {
-  const {
-    query,
-    search_depth = 'basic',
-    max_results = 5,
-    include_raw_content = false,
-  } = req.body;
+// ─── POST /search ─────────────────────────────────────────────────────────────
+router.post('/search', async (req: Request, res: Response) => {
+  const { query, search_depth = 'basic', max_results = 5, include_raw_content = false } = req.body;
 
   if (!query || typeof query !== 'string' || query.trim() === '') {
     res.status(400).json({ error: '`query` (string) is required' });
@@ -42,7 +55,7 @@ router.post('/v1/search', async (req: Request, res: Response) => {
     res.json({
       query: result.query,
       answer: result.answer ?? null,
-      results: result.results.map((r) => ({
+      results: (result.results ?? []).map((r) => ({
         title: r.title,
         url: r.url,
         content: r.content,

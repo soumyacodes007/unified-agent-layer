@@ -1,8 +1,28 @@
 import { Router, type Request, type Response } from 'express';
 import { fal } from '@fal-ai/client';
+import { paymentMiddleware } from '@x402-avm/express';
+import { ALGORAND_TESTNET_CAIP2 } from '@x402-avm/avm';
 import { config } from '../config.js';
 
 const router = Router();
+
+// ─── Payment Protection ───────────────────────────────────────────────────────
+export function protectImage(server: any) {
+  return paymentMiddleware(
+    {
+      'POST /v1/image': {
+        accepts: {
+          scheme: 'exact',
+          network: ALGORAND_TESTNET_CAIP2,
+          payTo: config.x402.avmAddress,
+          price: '$0.05',
+        },
+        description: 'AI image generation via Flux.1 [schnell] on fal.ai',
+      },
+    },
+    server
+  );
+}
 
 // Fal model IDs map
 const FAL_MODELS: Record<string, string> = {
@@ -13,8 +33,7 @@ const FAL_MODELS: Record<string, string> = {
 
 // ─── POST /v1/image ────────────────────────────────────────────────────────────
 // Generates an image from a text prompt using fal.ai Flux models.
-// Returns image URL and dimensions.
-router.post('/v1/image', async (req: Request, res: Response) => {
+router.post('/image', async (req: Request, res: Response) => {
   const {
     prompt,
     model = 'flux-schnell',
@@ -37,7 +56,9 @@ router.post('/v1/image', async (req: Request, res: Response) => {
   }
 
   // Configure fal.ai with API key
-  fal.config({ credentials: config.providers.fal.key });
+  if (config.providers.fal.key) {
+    fal.config({ credentials: config.providers.fal.key });
+  }
 
   try {
     const input: Record<string, unknown> = { prompt, image_size: { width, height } };
@@ -45,7 +66,6 @@ router.post('/v1/image', async (req: Request, res: Response) => {
 
     const result = await fal.subscribe(falModelId, { input });
 
-    // fal.ai returns images array
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const images = (result as any)?.data?.images ?? (result as any)?.images ?? [];
     const firstImage = images[0];

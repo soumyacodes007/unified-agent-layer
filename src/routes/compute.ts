@@ -1,105 +1,75 @@
 import { Router, type Request, type Response } from 'express';
+import { paymentMiddleware } from '@x402-avm/express';
+import { ALGORAND_TESTNET_CAIP2 } from '@x402-avm/avm';
 import { config } from '../config.js';
 
 const router = Router();
 
-// ─── POST /v1/compute ─────────────────────────────────────────────────────────
-// Executes code in a self-hosted Piston sandbox (requires Docker).
-// Setup: docker run -d -p 2000:2000 ghcr.io/engineer-man/piston
-router.post('/v1/compute', async (req: Request, res: Response) => {
+// ─── Payment Protection ───────────────────────────────────────────────────────
+export function protectCompute(server: any) {
+  return paymentMiddleware(
+    {
+      'POST /v1/compute': {
+        accepts: {
+          scheme: 'exact',
+          network: ALGORAND_TESTNET_CAIP2,
+          payTo: config.x402.avmAddress,
+          price: '$0.01',
+        },
+        description: 'Isolated code execution in 70+ languages (Piston)',
+      },
+    },
+    server
+  );
+}
+
+// ─── POST /compute ────────────────────────────────────────────────────────────
+router.post('/compute', async (req: Request, res: Response) => {
   const { language, code, stdin = '', args = [] } = req.body;
 
   if (!language || typeof language !== 'string') {
-    res.status(400).json({ error: 'language field is required (e.g. "python", "javascript", "rust")' });
+    res.status(400).json({ error: 'language field is required' });
     return;
   }
-  if (!code || typeof code !== 'string' || code.trim().length === 0) {
-    res.status(400).json({ error: 'code field is required and must be a non-empty string' });
+  if (!code || typeof code !== 'string') {
+    res.status(400).json({ error: 'code field is required' });
     return;
   }
 
   const primaryUrl = config.compute.pistonUrl;
   const fallbackUrl = config.compute.pistonFallbackUrl;
 
-  async function tryExecute(url: string, isFallback: boolean): Promise<boolean> {
+  try {
+    let response;
     try {
-      // First fetch available runtimes to validate language + get version
-      const runtimesRes = await fetch(`${url}/api/v2/runtimes`);
-      if (!runtimesRes.ok) throw new Error('Piston runtimes endpoint unavailable');
-      const runtimes = await runtimesRes.json() as { language: string; version: string; aliases: string[] }[];
-
-      const runtime = runtimes.find(
-        r => r.language === language.toLowerCase() || r.aliases.includes(language.toLowerCase())
-      );
-
-      if (!runtime) {
-        res.status(400).json({
-          error: `Language '${language}' not supported.`,
-          supported: runtimes.map(r => r.language),
-        });
-        return true; // Sent 400, stop
-      }
-
-      // Execute the code
-      const execRes = await fetch(`${url}/api/v2/execute`, {
+      // Try local primary Piston
+      response = await fetch(`${primaryUrl}/api/v2/execute`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          language: runtime.language,
-          version: runtime.version,
-          files: [{ name: `main.${getExtension(runtime.language)}`, content: code }],
-          stdin,
-          args,
-          run_timeout: 10000,
-          compile_timeout: 15000,
-        }),
+        body: JSON.stringify({ language, version: '*', files: [{ content: code }], stdin, args }),
       });
-
-      if (!execRes.ok) {
-        throw new Error(`Piston returned ${execRes.status}: ${await execRes.text()}`);
-      }
-
-      const result = await execRes.json() as {
-        run: { stdout: string; stderr: string; code: number; signal: string | null };
-        compile?: { stdout: string; stderr: string; code: number };
-      };
-
-      res.json({
-        stdout: result.run.stdout,
-        stderr: result.run.stderr,
-        exit_code: result.run.code,
-        signal: result.run.signal,
-        compile: result.compile ?? null,
-        language: runtime.language,
-        version: runtime.version,
-        provider: isFallback ? 'piston-public' : 'piston-local',
+      if (!response.ok) throw new Error(`Primary Piston returned ${response.status}`);
+    } catch (e) {
+      console.warn('[compute] Primary Piston failed, trying fallback...');
+      response = await fetch(`${fallbackUrl}/api/v2/execute`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ language, version: '*', files: [{ content: code }], stdin, args }),
       });
-      return true;
-    } catch (err: any) {
-      if (!isFallback && (err.code === 'ECONNREFUSED' || err.message.includes('fetch failed'))) {
-        console.warn(`[compute] Local Piston unreachable at ${url}, falling back to public API...`);
-        return false; // Try fallback
-      }
-      console.error(`[compute] Piston error (${isFallback ? 'public' : 'local'}):`, err);
-      const msg = err instanceof Error ? err.message : String(err);
-      res.status(502).json({ error: 'Code execution failed', details: msg, provider: isFallback ? 'public' : 'local' });
-      return true;
     }
-  }
 
-  const handled = await tryExecute(primaryUrl, false);
-  if (!handled) {
-    await tryExecute(fallbackUrl, true);
+    const data = await response.json();
+    res.json({
+      run: data.run,
+      language: data.language,
+      version: data.version,
+      provider: response.url.includes('emkc.org') ? 'public-piston' : 'private-piston',
+    });
+  } catch (err: unknown) {
+    console.error('[compute] Execution error:', err);
+    const msg = err instanceof Error ? err.message : String(err);
+    res.status(502).json({ error: 'Code execution failed', details: msg });
   }
 });
-
-function getExtension(language: string): string {
-  const map: Record<string, string> = {
-    python: 'py', javascript: 'js', typescript: 'ts', go: 'go',
-    rust: 'rs', java: 'java', 'c++': 'cpp', c: 'c', ruby: 'rb',
-    php: 'php', bash: 'sh', kotlin: 'kt',
-  };
-  return map[language.toLowerCase()] ?? 'txt';
-}
 
 export default router;

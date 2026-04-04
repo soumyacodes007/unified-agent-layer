@@ -1,19 +1,43 @@
 import { Router, type Request, type Response } from 'express';
 import Groq from 'groq-sdk';
+import { paymentMiddleware } from '@x402-avm/express';
+import { ALGORAND_TESTNET_CAIP2 } from '@x402-avm/avm';
+import { config } from '../config.js';
 import { classifyPrompt, getModelForComplexity } from '../router.js';
 
 const router = Router();
+
+// ─── Payment Protection ───────────────────────────────────────────────────────
+export function protectChat(server: any) {
+  return paymentMiddleware(
+    {
+      'POST /v1/chat': {
+        accepts: {
+          scheme: 'exact',
+          network: ALGORAND_TESTNET_CAIP2,
+          payTo: config.x402.avmAddress,
+          price: '$0.005',
+        },
+        description: 'OpenAI-compatible chat completions with autonomous model routing (Groq)',
+      },
+    },
+    server
+  );
+}
+
 // Lazy init — prevents crash at startup if GROQ_API_KEY is missing/mock
 let _groq: Groq | null = null;
 function getGroq(): Groq {
-  if (!_groq) _groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+  if (!_groq) {
+    const apiKey = config.providers.groq.apiKey;
+    if (!apiKey) throw new Error('GROQ_API_KEY is missing');
+    _groq = new Groq({ apiKey });
+  }
   return _groq;
 }
 
 // ─── POST /v1/chat ─────────────────────────────────────────────────────────────
-// OpenAI-compatible chat completions via Groq.
-// Supports: model = "auto" | "llama-3.1-8b-instant" | "llama-4-scout-17b-16e-instruct" | "llama-3.3-70b-versatile"
-router.post('/v1/chat', async (req: Request, res: Response) => {
+router.post('/chat', async (req: Request, res: Response) => {
   const { messages, model = 'auto', temperature = 0.7, max_tokens = 2048 } = req.body;
 
   if (!messages || !Array.isArray(messages) || messages.length === 0) {
@@ -21,42 +45,30 @@ router.post('/v1/chat', async (req: Request, res: Response) => {
     return;
   }
 
-  let resolvedModel = model;
-
-  // ── Auto-routing: classify and pick the best model ──────────────────────────
-  if (model === 'auto') {
-    try {
-      const complexity = await classifyPrompt(messages);
-      resolvedModel = getModelForComplexity(complexity);
-      console.log(`[llm] Auto-routed to ${resolvedModel} (complexity: ${complexity})`);
-    } catch (err) {
-      // Fallback to cheapest model if classifier fails
-      resolvedModel = 'llama-3.1-8b-instant';
-      console.warn('[llm] Classifier failed, falling back to llama-3.1-8b-instant:', err);
-    }
-  }
-
   try {
+    let targetModel = model;
+    if (model === 'auto') {
+      const complexity = await classifyPrompt(messages);
+      targetModel = getModelForComplexity(complexity);
+    }
+
     const completion = await getGroq().chat.completions.create({
-      model: resolvedModel,
       messages,
+      model: targetModel,
       temperature,
       max_tokens,
     });
 
-    // Return OpenAI-compatible response with extra metadata
     res.json({
-      ...completion,
-      _meta: {
-        routed_model: resolvedModel,
-        requested_model: model,
-        provider: 'groq',
-      },
+      model: targetModel,
+      choices: completion.choices,
+      usage: completion.usage,
+      provider: 'groq',
     });
   } catch (err: unknown) {
     console.error('[llm] Groq error:', err);
     const msg = err instanceof Error ? err.message : String(err);
-    res.status(502).json({ error: 'LLM inference failed', details: msg });
+    res.status(502).json({ error: 'LLM completion failed', details: msg });
   }
 });
 

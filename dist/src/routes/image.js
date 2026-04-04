@@ -1,7 +1,23 @@
 import { Router } from 'express';
 import { fal } from '@fal-ai/client';
+import { paymentMiddleware } from '@x402-avm/express';
+import { ALGORAND_TESTNET_CAIP2 } from '@x402-avm/avm';
 import { config } from '../config.js';
 const router = Router();
+// ─── Payment Protection ───────────────────────────────────────────────────────
+export function protectImage(server) {
+    return paymentMiddleware({
+        'POST /v1/image': {
+            accepts: {
+                scheme: 'exact',
+                network: ALGORAND_TESTNET_CAIP2,
+                payTo: config.x402.avmAddress,
+                price: '$0.05',
+            },
+            description: 'AI image generation via Flux.1 [schnell] on fal.ai',
+        },
+    }, server);
+}
 // Fal model IDs map
 const FAL_MODELS = {
     'flux-schnell': 'fal-ai/flux/schnell',
@@ -10,8 +26,7 @@ const FAL_MODELS = {
 };
 // ─── POST /v1/image ────────────────────────────────────────────────────────────
 // Generates an image from a text prompt using fal.ai Flux models.
-// Returns image URL and dimensions.
-router.post('/v1/image', async (req, res) => {
+router.post('/image', async (req, res) => {
     const { prompt, model = 'flux-schnell', width = 1024, height = 1024, num_inference_steps, } = req.body;
     if (!prompt || typeof prompt !== 'string' || prompt.trim().length === 0) {
         res.status(400).json({ error: 'prompt field is required and must be a non-empty string' });
@@ -25,13 +40,14 @@ router.post('/v1/image', async (req, res) => {
         return;
     }
     // Configure fal.ai with API key
-    fal.config({ credentials: config.providers.fal.key });
+    if (config.providers.fal.key) {
+        fal.config({ credentials: config.providers.fal.key });
+    }
     try {
         const input = { prompt, image_size: { width, height } };
         if (num_inference_steps)
             input.num_inference_steps = num_inference_steps;
         const result = await fal.subscribe(falModelId, { input });
-        // fal.ai returns images array
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const images = result?.data?.images ?? result?.images ?? [];
         const firstImage = images[0];

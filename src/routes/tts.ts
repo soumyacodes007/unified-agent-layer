@@ -1,22 +1,35 @@
 import { Router, type Request, type Response } from 'express';
 import { createClient } from '@deepgram/sdk';
+import { paymentMiddleware } from '@x402-avm/express';
+import { ALGORAND_TESTNET_CAIP2 } from '@x402-avm/avm';
 import { config } from '../config.js';
 
 const router = Router();
 
-// ─── POST /v1/tts ─────────────────────────────────────────────────────────────
-// Converts text to speech using Deepgram Aura-2.
-// Returns raw MP3 audio binary (Content-Type: audio/mpeg).
-router.post('/v1/tts', async (req: Request, res: Response) => {
-  const { text, voice = 'aura-2-en-us' } = req.body;
+// ─── Payment Protection ───────────────────────────────────────────────────────
+export function protectTts(server: any) {
+  return paymentMiddleware(
+    {
+      'POST /v1/tts': {
+        accepts: {
+          scheme: 'exact',
+          network: ALGORAND_TESTNET_CAIP2,
+          payTo: config.x402.avmAddress,
+          price: '$0.01',
+        },
+        description: 'Ultra-low latency TTS via Deepgram Aura-2',
+      },
+    },
+    server
+  );
+}
+
+// ─── POST /tts ─────────────────────────────────────────────────────────────
+router.post('/tts', async (req: Request, res: Response) => {
+  const { text, voice = 'aura-asteria-en' } = req.body;
 
   if (!text || typeof text !== 'string' || text.trim().length === 0) {
     res.status(400).json({ error: 'text field is required and must be a non-empty string' });
-    return;
-  }
-
-  if (text.length > 5000) {
-    res.status(400).json({ error: 'text must be 5000 characters or fewer' });
     return;
   }
 
@@ -27,32 +40,30 @@ router.post('/v1/tts', async (req: Request, res: Response) => {
       { text },
       {
         model: voice,
-        encoding: 'mp3',
+        encoding: 'linear16',
+        container: 'wav',
       }
     );
 
     const stream = await response.getStream();
-    if (!stream) {
-      throw new Error('No audio stream returned from Deepgram');
-    }
+    if (!stream) throw new Error('Could not get audio stream from Deepgram');
 
-    // Pipe the audio stream directly to the HTTP response
-    res.setHeader('Content-Type', 'audio/mpeg');
-    res.setHeader('X-Voice-Model', voice);
-    res.setHeader('X-Provider', 'deepgram');
-
+    // Convert stream to Buffer (robust way if getBuffer is missing in TS types)
     const reader = stream.getReader();
-    const pump = async () => {
+    const chunks: Uint8Array[] = [];
+    while (true) {
       const { done, value } = await reader.read();
-      if (done) {
-        res.end();
-        return;
-      }
-      res.write(value);
-      await pump();
-    };
-    await pump();
+      if (done) break;
+      if (value) chunks.push(value);
+    }
+    const buffer = Buffer.concat(chunks);
 
+    res.set({
+      'Content-Type': 'audio/wav',
+      'Content-Disposition': 'attachment; filename="speech.wav"',
+    });
+
+    res.send(buffer);
   } catch (err: unknown) {
     console.error('[tts] Deepgram error:', err);
     const msg = err instanceof Error ? err.message : String(err);

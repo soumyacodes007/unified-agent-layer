@@ -1,22 +1,39 @@
 import { Router, type Request, type Response } from 'express';
 import { InferenceClient } from '@huggingface/inference';
+import { paymentMiddleware } from '@x402-avm/express';
+import { ALGORAND_TESTNET_CAIP2 } from '@x402-avm/avm';
 import { config } from '../config.js';
 
 const router = Router();
 
-// ─── POST /v1/hf ─────────────────────────────────────────────────────────────
-// Runs inference on any HuggingFace model via the Serverless Inference API.
-// Supports: text-classification, summarization, NER, fill-mask, Q&A, and more.
-// Example: POST /v1/hf with body { "model": "distilbert-base-uncased-finetuned-sst-2-english", "inputs": "..." }
-router.post('/v1/hf', async (req: Request, res: Response) => {
+// ─── Payment Protection ───────────────────────────────────────────────────────
+export function protectHf(server: any) {
+  return paymentMiddleware(
+    {
+      'POST /v1/hf': {
+        accepts: {
+          scheme: 'exact',
+          network: ALGORAND_TESTNET_CAIP2,
+          payTo: config.x402.avmAddress,
+          price: '$0.03',
+        },
+        description: 'Inference on any HuggingFace Serverless model',
+      },
+    },
+    server
+  );
+}
+
+// ─── POST /hf ────────────────────────────────────────────────────────────────
+router.post('/hf', async (req: Request, res: Response) => {
   const { model: modelId, inputs, parameters = {} } = req.body;
 
   if (!modelId) {
-    res.status(400).json({ error: 'model field is required in the request body.' });
+    res.status(400).json({ error: 'model field is required' });
     return;
   }
   if (inputs === undefined || inputs === null) {
-    res.status(400).json({ error: 'inputs field is required in the request body.' });
+    res.status(400).json({ error: 'inputs field is required' });
     return;
   }
 
@@ -38,13 +55,12 @@ router.post('/v1/hf', async (req: Request, res: Response) => {
     console.error(`[hf] HuggingFace error for model ${modelId}:`, err);
     const msg = err instanceof Error ? err.message : String(err);
 
-    // Give helpful error if model doesn't exist or isn't supported
     if (msg.includes('404') || msg.includes('not found')) {
-      res.status(404).json({ error: `Model '${modelId}' not found on HuggingFace. Check the model ID at https://huggingface.co/models`, details: msg });
+      res.status(404).json({ error: `Model '${modelId}' not found.`, details: msg });
       return;
     }
     if (msg.includes('loading')) {
-      res.status(503).json({ error: `Model '${modelId}' is currently loading on HuggingFace servers. Try again in 20-30 seconds.`, details: msg });
+      res.status(503).json({ error: `Model '${modelId}' is currently loading.`, details: msg });
       return;
     }
 
