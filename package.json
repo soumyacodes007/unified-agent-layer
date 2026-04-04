@@ -1,0 +1,37 @@
+{
+  "name": "agent-api",
+  "version": "1.0.0",
+  "description": "Unified AI Layer — x402-gated LLM, STT, TTS, Image, Storage, Compute, Search & HuggingFace endpoints on Algorand",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "start": "node dist/src/server.js",
+    "build": "tsc"
+  },
+  "dependencies": {
+    "@deepgram/sdk": "^3.11.0",
+    "@fal-ai/client": "^1.5.0",
+    "@huggingface/inference": "^3.9.0",
+    "@tavily/core": "^0.7.2",
+    "@x402-avm/avm": "latest",
+    "@x402-avm/core": "latest",
+    "@x402-avm/express": "latest",
+    "@x402-avm/extensions": "^2.6.1",
+    "@x402-avm/fetch": "^2.6.1",
+    "algosdk": "^3.1.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^5.0.1",
+    "groq-sdk": "^0.13.0",
+    "multer": "^1.4.5-lts.1",
+    "pinata": "^1.1.3"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.0",
+    "@types/multer": "^1.4.12",
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3"
+  }
+}
