@@ -1,7 +1,13 @@
 import { Router } from 'express';
 import { tavily } from '@tavily/core';
 const router = Router();
-const tv = tavily({ apiKey: process.env.TAVILY_API_KEY ?? '' });
+// Lazy init — prevents crash at startup when TAVILY_API_KEY is missing
+let _tv = null;
+function getTavily() {
+    if (!_tv)
+        _tv = tavily({ apiKey: process.env.TAVILY_API_KEY ?? '' });
+    return _tv;
+}
 // ─── POST /v1/search ───────────────────────────────────────────────────────────
 // Real-time web search powered by Tavily. Returns LLM-ready structured results.
 // search_depth: 'basic' (fast) | 'advanced' (deeper, more accurate)
@@ -17,7 +23,7 @@ router.post('/v1/search', async (req, res) => {
         return;
     }
     try {
-        const result = await tv.search(query, {
+        const result = await getTavily().search(query, {
             searchDepth: search_depth,
             maxResults: Math.min(Math.max(1, Number(max_results) || 5), 10),
             includeRawContent: include_raw_content,

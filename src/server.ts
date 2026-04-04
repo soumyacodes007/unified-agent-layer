@@ -1,7 +1,6 @@
+import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
-import dotenv from 'dotenv';
-dotenv.config();
 
 import { paymentMiddleware, x402ResourceServer } from '@x402-avm/express';
 import { registerExactAvmScheme } from '@x402-avm/avm/exact/server';
@@ -190,15 +189,15 @@ app.get('/', (_req, res) => {
     facilitator: FACILITATOR_URL,
     payTo: AVM_ADDRESS,
     endpoints: {
-      'POST /v1/chat':          '$0.005 — LLM chat completions (Groq)',
-      'POST /v1/stt':           '$0.010 — Speech-to-text',
-      'POST /v1/tts':           '$0.010 — Text-to-speech',
-      'POST /v1/image':         '$0.050 — Image generation',
-      'POST /v1/storage/upload':'$0.020 — IPFS storage',
-      'POST /v1/compute/run':   '$0.010 — Code execution',
-      'POST /v1/hf':            '$0.030 — HuggingFace inference',
-      'POST /v1/search':        '$0.030 — Web search',
-      'GET  /v1/weather':       '$0.010 — Weather data + forecast',
+      'POST /v1/chat': '$0.005 — LLM chat completions (Groq)',
+      'POST /v1/stt': '$0.010 — Speech-to-text',
+      'POST /v1/tts': '$0.010 — Text-to-speech',
+      'POST /v1/image': '$0.050 — Image generation',
+      'POST /v1/storage/upload': '$0.020 — IPFS storage',
+      'POST /v1/compute/run': '$0.010 — Code execution',
+      'POST /v1/hf': '$0.030 — HuggingFace inference',
+      'POST /v1/search': '$0.030 — Web search',
+      'GET  /v1/weather': '$0.010 — Weather data + forecast',
     },
   });
 });

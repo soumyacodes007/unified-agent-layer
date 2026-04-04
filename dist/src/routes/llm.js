@@ -2,7 +2,13 @@ import { Router } from 'express';
 import Groq from 'groq-sdk';
 import { classifyPrompt, getModelForComplexity } from '../router.js';
 const router = Router();
-const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+// Lazy init — prevents crash at startup if GROQ_API_KEY is missing/mock
+let _groq = null;
+function getGroq() {
+    if (!_groq)
+        _groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+    return _groq;
+}
 // ─── POST /v1/chat ─────────────────────────────────────────────────────────────
 // OpenAI-compatible chat completions via Groq.
 // Supports: model = "auto" | "llama-3.1-8b-instant" | "llama-4-scout-17b-16e-instruct" | "llama-3.3-70b-versatile"
@@ -27,7 +33,7 @@ router.post('/v1/chat', async (req, res) => {
         }
     }
     try {
-        const completion = await groq.chat.completions.create({
+        const completion = await getGroq().chat.completions.create({
             model: resolvedModel,
             messages,
             temperature,

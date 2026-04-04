@@ -1,12 +1,21 @@
 import Groq from 'groq-sdk';
 
-const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+let _groq: Groq | null = null;
+function getGroq(): Groq {
+  if (!_groq) {
+    if (!process.env.GROQ_API_KEY) {
+      throw new Error('GROQ_API_KEY is missing in environment variables');
+    }
+    _groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+  }
+  return _groq;
+}
 
 type Complexity = 'SIMPLE' | 'MEDIUM' | 'COMPLEX';
 
 const MODEL_MAP: Record<Complexity, string> = {
-  SIMPLE:  'llama-3.1-8b-instant',            // Fast, cheap, handles easy tasks
-  MEDIUM:  'llama-4-scout-17b-16e-instruct',  // Balanced performance
+  SIMPLE: 'llama-3.1-8b-instant',            // Fast, cheap, handles easy tasks
+  MEDIUM: 'llama-4-scout-17b-16e-instruct',  // Balanced performance
   COMPLEX: 'llama-3.3-70b-versatile',         // Smartest, handles hard reasoning
 };
 
@@ -16,7 +25,7 @@ const MODEL_MAP: Record<Complexity, string> = {
 export async function classifyPrompt(messages: { role: string; content: string }[]): Promise<Complexity> {
   const lastUserMessage = messages.filter(m => m.role === 'user').pop()?.content ?? '';
 
-  const classification = await groq.chat.completions.create({
+  const classification = await getGroq().chat.completions.create({
     model: 'llama-3.1-8b-instant',
     max_tokens: 5,
     temperature: 0,
