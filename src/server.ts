@@ -38,6 +38,14 @@ server.registerExtension(bazaarResourceServerExtension);
 // ─── Express App ──────────────────────────────────────────────────────────────
 const app = express();
 
+// Global handles for diagnostics
+process.on('uncaughtException', (err) => {
+  console.error('❌ UNCAUGHT EXCEPTION:', err);
+});
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('❌ UNHANDLED REJECTION:', reason);
+});
+
 // Diagnostic Logger (Crucial for Railway testing)
 app.use((req, _res, next) => {
   console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
@@ -96,13 +104,32 @@ app.use((_req, res) => {
 
 // ─── Start ────────────────────────────────────────────────────────────────────
 const baseUrl = config.server.serviceUrl ?? `http://localhost:${port}`;
-app.listen(port, host, () => {
-  console.log('\n🚀 Agent API — Unified AI Layer');
-  console.log(`   URL:         ${baseUrl}`);
-  console.log(`   Facilitator: ${FACILITATOR_URL}`);
-  console.log(`   Pay To:      ${AVM_ADDRESS}`);
-  console.log(`   Network:     algorand:testnet (CAIP-2)`);
-  console.log(`\n   Routes: /v1/chat | /v1/stt | /v1/tts | /v1/image | /v1/storage | /v1/compute | /v1/hf | /v1/search | /v1/weather\n`);
-});
+
+try {
+  const serverInstance = app.listen(port, host, () => {
+    console.log('\n🚀 Agent API — Unified AI Layer');
+    console.log(`   URL:         ${baseUrl}`);
+    console.log(`   Host/Port:   ${host}:${port}`);
+    console.log(`   Facilitator: ${FACILITATOR_URL}`);
+    console.log(`   Pay To:      ${AVM_ADDRESS}`);
+    console.log(`   Network:     algorand:testnet (CAIP-2)`);
+    console.log(`\n   Routes: /v1/chat | /v1/stt | /v1/tts | /v1/image | /v1/storage | /v1/compute | /v1/hf | /v1/search | /v1/weather\n`);
+  });
+
+  serverInstance.on('error', (err: any) => {
+    console.error('❌ SERVER ERROR:', err);
+    if (err.code === 'EADDRINUSE') {
+      console.error(`Port ${port} is already in use.`);
+    }
+  });
+
+  // Keep-alive mechanism to ensure event loop doesn't empty out
+  setInterval(() => {
+    // Just a heartbeat to keep process alive in environments with empty event loops
+  }, 60000);
+
+} catch (err) {
+  console.error('❌ CRITICAL STARTUP ERROR:', err);
+}
 
 export default app;
