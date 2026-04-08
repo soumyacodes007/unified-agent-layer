@@ -27,7 +27,7 @@ Returns system status and uptime.
 ### LLM Chat Completions
 `POST /v1/chat`
 **Price**: $0.005
-OpenAI-compatible chat completions with autonomous model routing (Groq).
+OpenAI-compatible chat completions with Groq auto-routing or explicit model selection.
 
 **Request Body**:
 ```json
@@ -37,10 +37,20 @@ OpenAI-compatible chat completions with autonomous model routing (Groq).
   ],
   "model": "auto",
   "temperature": 0.7,
-  "max_tokens": 2048
+  "max_completion_tokens": 2048
 }
 ```
-**Supported Models**: `auto` (auto-routed), `llama-3.1-8b-instant`, `llama-4-scout-17b-16e-instruct`, `llama-3.3-70b-versatile`.
+**Supported Models**: `auto`, `llama-3.1-8b-instant`, `llama-3.3-70b-versatile`, `meta-llama/llama-4-scout-17b-16e-instruct`, `openai/gpt-oss-20b`, `openai/gpt-oss-120b`, `qwen/qwen3-32b`, `groq/compound`, `groq/compound-mini`, `openai/gpt-oss-safeguard-20b`, `meta-llama/llama-prompt-guard-2-22m`, `meta-llama/llama-prompt-guard-2-86m`.
+
+**Groq-Specific Optional Fields**:
+- `reasoning_effort`: `low`, `medium`, `high` for GPT-OSS models; `none`, `default` for Qwen 3.
+- `include_reasoning`: Boolean toggle for returning reasoning when the selected model supports it.
+- `reasoning_format`: `parsed`, `raw`, or `hidden` for Qwen 3.
+- `tools`, `tool_choice`, `response_format`: Passed through for Groq models that support tool use or structured outputs.
+
+### List Chat Models
+`GET /v1/chat/models`
+Returns the Groq-backed chat model registry exposed by this API, including capabilities and limits.
 
 ---
 

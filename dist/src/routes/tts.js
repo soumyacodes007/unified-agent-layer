@@ -20,7 +20,7 @@ export function protectTts(server) {
 }
 // ─── POST /tts ─────────────────────────────────────────────────────────────
 router.post('/tts', async (req, res) => {
-    const { text, voice = 'aura-asteria-en' } = req.body;
+    const { text, voice = 'aura-asteria-en', format = 'mp3' } = req.body;
     if (!text || typeof text !== 'string' || text.trim().length === 0) {
         res.status(400).json({ error: 'text field is required and must be a non-empty string' });
         return;
@@ -28,12 +28,17 @@ router.post('/tts', async (req, res) => {
     // Deepgram Aura models: aura-asteria-en, aura-luna-en, aura-stella-en, etc.
     // "aura-2-en-us" might not be available on all projects.
     const modelId = voice.includes('aura') ? voice : 'aura-asteria-en';
+    const normalizedFormat = typeof format === 'string' ? format.toLowerCase() : 'mp3';
+    if (!['mp3', 'wav'].includes(normalizedFormat)) {
+        res.status(400).json({ error: 'format must be either "mp3" or "wav"' });
+        return;
+    }
     const deepgram = createClient(config.providers.deepgram.apiKey);
     try {
         const response = await deepgram.speak.request({ text }, {
             model: modelId,
-            encoding: 'linear16',
-            container: 'wav',
+            encoding: normalizedFormat === 'mp3' ? 'mp3' : 'linear16',
+            container: normalizedFormat === 'mp3' ? 'mp3' : 'wav',
         });
         const stream = await response.getStream();
         if (!stream)
@@ -64,8 +69,8 @@ router.post('/tts', async (req, res) => {
             }
         }
         res.set({
-            'Content-Type': 'audio/wav',
-            'Content-Disposition': 'attachment; filename="speech.wav"',
+            'Content-Type': normalizedFormat === 'mp3' ? 'audio/mpeg' : 'audio/wav',
+            'Content-Disposition': `attachment; filename="speech.${normalizedFormat}"`,
         });
         res.send(buffer);
     }
